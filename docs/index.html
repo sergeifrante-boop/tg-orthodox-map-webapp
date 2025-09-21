@@ -96,6 +96,37 @@
         const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
         return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
       }
+      function wikiUrl(wikipediaTag) {
+  // Пример тега: "ru:Храм_Христа_Спасителя" или "en:Cathedral of Christ the Saviour"
+  if (!wikipediaTag) return null;
+  const [lang, ...rest] = wikipediaTag.split(':');
+  const title = rest.join(':').trim().replace(/\s/g, '_');
+  if (!lang || !title) return null;
+  return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
+}
+
+function buildPopup(p) {
+  const t = p.tags || {};
+  const addrLine = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' ');
+  const city = t['addr:city'] || t['addr:suburb'];
+  const denom = t.denomination ? t.denomination.replace(/_/g, ' ') : null;
+  const phone = t.phone || t['contact:phone'];
+  const site  = t.website || t.url;
+  const wiki  = t.wikipedia ? wikiUrl(t.wikipedia) : (t.wikidata ? `https://www.wikidata.org/wiki/${t.wikidata}` : null);
+
+  const rows = [
+    `🕍 <b>${p.name}</b>`,
+    addrLine || city ? `📍 ${[addrLine, city].filter(Boolean).join(', ')}` : null,
+    denom ? `✝️ ${denom}` : null,
+    t.opening_hours ? `⏰ ${t.opening_hours}` : null,
+    phone ? `📞 <a href="tel:${phone.replace(/[^+\d]/g,'')}">${phone}</a>` : null,
+    site ? `🌐 <a href="${site}" target="_blank" rel="noopener">Website</a>` : null,
+    wiki ? `📖 <a href="${wiki}" target="_blank" rel="noopener">About</a>` : null,
+    (typeof userLatLng?.lat === 'number') ? `📏 ${km(hav(userLatLng.lat, userLatLng.lon, p.lat, p.lon))}` : null,
+  ].filter(Boolean);
+
+  return rows.join('<br>');
+}
       function setStatus(t){ statusEl.textContent=t; }
       function setError(t){ errorEl.textContent=t; errorEl.classList.toggle('hidden',!t); }
 
@@ -124,11 +155,15 @@
             const res = await fetch(url, { method: 'POST', body: overpass, headers: { 'Content-Type':'text/plain' } });
             if (!res.ok) throw new Error('Overpass ' + res.status);
             const data = await res.json();
-            return data.elements.map(el=>{
-              const latc = el.type==='node'?el.lat:el.center?.lat;
-              const lonc = el.type==='node'?el.lon:el.center?.lon;
-              return { id:el.id, name:(el.tags?.name||'Orthodox Church'), lat:latc, lon:lonc };
-            }).filter(p=>p.lat&&p.lon);
+           return data.elements
+  .map(el => {
+    const latc = el.type === 'node' ? el.lat : el.center?.lat;
+    const lonc = el.type === 'node' ? el.lon : el.center?.lon;
+    const tags = el.tags || {};
+    const name = tags['name:ru'] || tags.name || 'Православный храм';
+    return { id: el.id, name, lat: latc, lon: lonc, tags };
+  })
+  .filter(p => p.lat && p.lon);
           } catch(e){ lastErr=e; }
         }
         throw lastErr || new Error('Overpass failed');
@@ -139,8 +174,9 @@
         places.forEach(p=>{
           const d=hav(userLatLng.lat,userLatLng.lon,p.lat,p.lon);
           if(!best||d<best.distance) best={...p,distance:d};
-          L.marker([p.lat,p.lon], { icon: churchIcon, title: p.name })
- .addTo(map).bindPopup(`🕍 <b>${p.name}</b>`);
+        L.marker([p.lat, p.lon], { icon: churchIcon, title: p.name })
+  .addTo(map)
+  .bindPopup(buildPopup(p));
         });
         return best;
       }
@@ -181,7 +217,10 @@
         }
         userLatLng={lat,lon};
         nearest = pickNearest(places);
-L.marker([nearest.lat,nearest.lon], { icon: churchIcon, title: nearest.name }).addTo(map).bindPopup(`🕍 <b>${nearest.name}</b> (nearest)`).openPopup();        
+L.marker([nearest.lat, nearest.lon], { icon: churchIcon, title: nearest.name })
+  .addTo(map)
+  .bindPopup(buildPopup(nearest))
+  .openPopup();       
 setStatus('Nearest found');
         infoEl.innerHTML=`Nearest: <b>${nearest.name}</b> · ~${km(hav(lat,lon,nearest.lat,nearest.lon))} away`;
         externalBtn.href=externalMapLink(nearest);
