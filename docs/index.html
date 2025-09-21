@@ -137,37 +137,56 @@ function buildPopup(p) {
         map.setView([lat, lon], 15);
       }
 
-      async function queryOrthodox(lat, lon, radius){
-        const overpass = `[out:json][timeout:25];
-          (
-            node["amenity"="place_of_worship"]["religion"="christian"]["denomination"~"orthodox", i](around:${radius},${lat},${lon});
-            way["amenity"="place_of_worship"]["religion"="christian"]["denomination"~"orthodox", i](around:${radius},${lat},${lon});
-            relation["amenity"="place_of_worship"]["religion"="christian"]["denomination"~"orthodox", i](around:${radius},${lat},${lon});
-          ); out center 40;`;
-        const endpoints = [
-          'https://overpass-api.de/api/interpreter',
-          'https://overpass.kumi.systems/api/interpreter',
-          'https://overpass.openstreetmap.ru/api/interpreter'
-        ];
-        let lastErr;
-        for (const url of endpoints) {
-          try {
-            const res = await fetch(url, { method: 'POST', body: overpass, headers: { 'Content-Type':'text/plain' } });
-            if (!res.ok) throw new Error('Overpass ' + res.status);
-            const data = await res.json();
-           return data.elements
-  .map(el => {
-    const latc = el.type === 'node' ? el.lat : el.center?.lat;
-    const lonc = el.type === 'node' ? el.lon : el.center?.lon;
-    const tags = el.tags || {};
-    const name = tags['name:ru'] || tags.name || 'Православный храм';
-    return { id: el.id, name, lat: latc, lon: lonc, tags };
-  })
-  .filter(p => p.lat && p.lon);
-          } catch(e){ lastErr=e; }
-        }
-        throw lastErr || new Error('Overpass failed');
+ async function queryOrthodox(lat, lon, radius) {
+  // шире охват по тегам: amenity=place_of_worship|monastery,
+  // religion=orthodox|christian ИЛИ denomination содержит *orthodox* / old_believer,
+  // + фолбэк по имени (Orthodox|Православ)
+  const q = `[out:json][timeout:30];
+  (
+    nwr["amenity"~"place_of_worship|monastery",i]["religion"~"orthodox|christian",i](around:${radius},${lat},${lon});
+    nwr["amenity"~"place_of_worship|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:${radius},${lat},${lon});
+    nwr["amenity"~"place_of_worship|monastery",i]["name"~"Orthodox|Православ",i](around:${radius},${lat},${lon});
+    nwr["building"~"church|chapel|cathedral|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:${radius},${lat},${lon});
+  );
+  out center;`;
+
+  const endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.openstreetmap.ru/api/interpreter'
+  ];
+
+  let lastErr;
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { method: 'POST', body: q, headers: { 'Content-Type':'text/plain' } });
+      if (!res.ok) throw new Error('Overpass ' + res.status);
+      const data = await res.json();
+
+      // нормализуем и удаляем дубликаты по типу+id (node/way/relation)
+      const seen = new Set();
+      const list = [];
+      for (const el of data.elements) {
+        const latc = el.type === 'node' ? el.lat : el.center?.lat;
+        const lonc = el.type === 'node' ? el.lon : el.center?.lon;
+        if (!latc || !lonc) continue;
+        const key = `${el.type}/${el.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const tags = el.tags || {};
+        const name = tags['name:ru'] || tags.name || 'Православный храм';
+        list.push({ id: key, name, lat: latc, lon: lonc, tags });
       }
+
+      // мягкий ограничитель, чтобы не рендерить тысячи маркеров
+      return list.slice(0, 400);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('Overpass failed');
+}
 
       function pickNearest(places){
         let best=null;
