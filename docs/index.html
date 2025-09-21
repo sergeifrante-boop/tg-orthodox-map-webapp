@@ -24,12 +24,8 @@
       .pill{padding:5px 10px;border-radius:999px;background:#1b2330;color:var(--muted);font-size:12px}
       .list{font-size:13px;color:var(--muted)} .list b{color:var(--fg)}
       .credit{color:var(--muted);font-size:12px;text-align:center}
-      .marker { 
-  width: 18px; height: 18px; border-radius: 50%;
-  border: 2px solid #fff;         
-  box-shadow: 0 1px 4px rgba(0,0,0,.35);
-}
-.marker-user   { background:#3b82f6; }  
+      .marker {width: 18px; height: 18px; border-radius: 50%;border: 2px solid #fff;box-shadow: 0 1px 4px rgba(0,0,0,.35);}
+.marker-user   { background:#3b82f6; }
 .marker-church { background:#fff; }
     </style>
   </head>
@@ -79,6 +75,19 @@
       let map, userMarker, routeLayer;
       let userLatLng = null;
       let nearest = null;
+      const userIcon = L.divIcon({
+    className: 'marker marker-user',
+    iconSize: [18,18],
+    iconAnchor: [9,9],
+    popupAnchor: [0,-10],
+  });
+
+  const churchIcon = L.divIcon({
+    className: 'marker marker-church',
+    iconSize: [16,16],
+    iconAnchor: [8,8],
+    popupAnchor: [0,-10],
+  });
 
       function km(m){ return (m/1000).toFixed(2) + ' km'; }
       function hav(lat1, lon1, lat2, lon2){
@@ -93,7 +102,7 @@
       function initMap(lat, lon){
         map = L.map('map');
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
-        userMarker = L.marker([lat, lon], { title: 'You' }).addTo(map);
+       userMarker = L.marker([lat, lon], { icon: userIcon, title: 'You' }).addTo(map);
         map.setView([lat, lon], 15);
       }
 
@@ -130,7 +139,8 @@
         places.forEach(p=>{
           const d=hav(userLatLng.lat,userLatLng.lon,p.lat,p.lon);
           if(!best||d<best.distance) best={...p,distance:d};
-          L.marker([p.lat,p.lon],{title:p.name}).addTo(map).bindPopup(`🕍 <b>${p.name}</b>`);
+          L.marker([p.lat,p.lon], { icon: churchIcon, title: p.name })
+ .addTo(map).bindPopup(`🕍 <b>${p.name}</b>`);
         });
         return best;
       }
@@ -171,8 +181,8 @@
         }
         userLatLng={lat,lon};
         nearest = pickNearest(places);
-        L.marker([nearest.lat,nearest.lon],{title:nearest.name}).addTo(map).bindPopup(`🕍 <b>${nearest.name}</b> (nearest)`).openPopup();
-        setStatus('Nearest found');
+L.marker([nearest.lat,nearest.lon], { icon: churchIcon, title: nearest.name }).addTo(map).bindPopup(`🕍 <b>${nearest.name}</b> (nearest)`).openPopup();        
+setStatus('Nearest found');
         infoEl.innerHTML=`Nearest: <b>${nearest.name}</b> · ~${km(hav(lat,lon,nearest.lat,nearest.lon))} away`;
         externalBtn.href=externalMapLink(nearest);
         externalBtn.textContent='Open in Maps';
