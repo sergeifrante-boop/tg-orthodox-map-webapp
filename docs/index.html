@@ -148,47 +148,68 @@ function buildPopup(p) {
     ');\n' +
     'out center;';
 
+  // Больше зеркал + рандомный старт для распределения нагрузки
   var endpoints = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.openstreetmap.fr/api/interpreter',
+    'https://overpass.osm.ch/api/interpreter',
     'https://overpass.openstreetmap.ru/api/interpreter'
   ];
+  var start = Math.floor(Math.random() * endpoints.length);
 
+  async function tryOnce(url) {
+    // читаем как текст и сами проверяем, что это JSON (чтобы не падать на XML/HTML)
+    var res = await fetch(url, {
+      method: 'POST',
+      body: q,
+      headers: { 'Content-Type': 'text/plain', 'Accept': 'application/json' },
+    });
+
+    if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
+      // перегрузка: даём шанс другому зеркалу
+      throw new Error('BUSY_' + res.status);
+    }
+
+    var text = await res.text();
+    var t = text.trim();
+    if (!t || t[0] !== '{') throw new Error('NOT_JSON'); // сервер прислал HTML/XML (страница ошибки)
+
+    var data;
+    try { data = JSON.parse(t); }
+    catch (e) { throw new Error('BAD_JSON'); }
+
+    // нормализация + дедуп
+    var seen = new Set();
+    var list = [];
+    for (var i = 0; i < (data.elements || []).length; i++) {
+      var el = data.elements[i];
+      var latc = el.type === 'node' ? el.lat : (el.center && el.center.lat);
+      var lonc = el.type === 'node' ? el.lon : (el.center && el.center.lon);
+      if (!latc || !lonc) continue;
+      var key = el.type + '/' + el.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      var tags = el.tags || {};
+      var name = tags['name:ru'] || tags.name || 'Православный храм';
+      list.push({ id: key, name: name, lat: latc, lon: lonc, tags: tags });
+    }
+    return list;
+  }
+
+  // Обход зеркал + лёгкий экспоненциальный бэкофф
   var lastErr = null;
-  for (var i = 0; i < endpoints.length; i++) {
-    var url = endpoints[i];
+  for (var step = 0; step < endpoints.length * 2; step++) {
+    var url = endpoints[(start + step) % endpoints.length];
     try {
-      var res = await fetch(url, {
-        method: 'POST',
-        body: q,
-        headers: { 'Content-Type': 'text/plain' }
-      });
-      if (!res.ok) throw new Error('Overpass ' + res.status);
-
-      var data = await res.json();
-      var seen = new Set();
-      var list = [];
-
-      for (var j = 0; j < data.elements.length; j++) {
-        var el = data.elements[j];
-        var latc = el.type === 'node' ? el.lat : (el.center && el.center.lat);
-        var lonc = el.type === 'node' ? el.lon : (el.center && el.center.lon);
-        if (!latc || !lonc) continue;
-
-        var key = el.type + '/' + el.id;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        var tags = el.tags || {};
-        var name = tags['name:ru'] || tags.name || 'Православный храм';
-        list.push({ id: key, name: name, lat: latc, lon: lonc, tags: tags });
-      }
-
-      // Ограничитель на всякий случай, чтобы не рендерить тысячи точек
+      var list = await tryOnce(url);
+      // мягкий ограничитель (для производительности рендера)
       return list.slice(0, 400);
     } catch (e) {
-      console.warn('Overpass error at', url, e);
       lastErr = e;
+      // маленькая задержка перед следующей попыткой
+      await new Promise(function (r) { setTimeout(r, 500 + Math.random() * 700); });
+      continue;
     }
   }
   throw (lastErr || new Error('Overpass failed'));
