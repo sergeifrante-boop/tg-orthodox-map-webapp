@@ -1,306 +1,304 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nearest Orthodox Church</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-    <style>
-      :root { --bg:#0e1117; --fg:#e6edf3; --muted:#9aa4ad; --brand:#3b82f6; }
-      html,body{height:100%;margin:0}
-      body{background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Arial}
-      #app{display:grid;grid-template-rows:auto 1fr auto;height:100%}
-      header{padding:10px 12px;border-bottom:1px solid #1f242b;display:flex;gap:8px;align-items:center}
-      header h1{font-size:16px;margin:0}
-      header .status{font-size:12px;color:var(--muted)}
-      #map{height:100%}
-      .panel{padding:10px 12px;border-top:1px solid #1f242b;display:grid;gap:8px}
-      .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-      button,a.btn{background:var(--brand);color:#fff;border:0;padding:10px 14px;border-radius:12px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
-      button:disabled{opacity:.6;cursor:not-allowed}
-      .secondary{background:#222a35;color:var(--fg)}
-      .error{color:#ff6b6b}
-      .hidden{display:none}
-      .pill{padding:5px 10px;border-radius:999px;background:#1b2330;color:var(--muted);font-size:12px}
-      .list{font-size:13px;color:var(--muted)} .list b{color:var(--fg)}
-      .credit{color:var(--muted);font-size:12px;text-align:center}
-      .marker {width: 18px; height: 18px; border-radius: 50%;border: 2px solid #fff;box-shadow: 0 1px 4px rgba(0,0,0,.35);}
-.marker-user   { background:#3b82f6; }
-.marker-church { background:#f87171; }
-    </style>
-  </head>
-  <body>
-    <div id="app">
-      <header>
-        <h1>🕯️ Nearest Orthodox Church</h1>
-        <span class="status" id="status">Initializing…</span>
-        <span class="pill" id="distancePill" hidden>–</span>
-      </header>
-      <div id="map"></div>
-      <div class="panel">
-        <div class="row">
-          <button id="recenterBtn" class="secondary">Recenter</button>
-          <button id="routeBtn">Route to nearest</button>
-          <a id="externalBtn" class="btn secondary" target="_blank" rel="noopener">Open in Maps</a>
-        </div>
-        <div class="list" id="info">Waiting for location…</div>
-        <div class="error hidden" id="error"></div>
-        <div class="credit">Data: © OpenStreetMap contributors • Routing by OSRM</div>
-      </div>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Nearest Orthodox Church</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<style>
+  :root { --bg:#0e1117; --fg:#e6edf3; --muted:#9aa4ad; --brand:#3b82f6; }
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Arial}
+  #app{display:grid;grid-template-rows:auto 1fr auto;height:100%}
+  header{padding:10px 12px;border-bottom:1px solid #1f242b;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0}
+  header .status{font-size:12px;color:var(--muted)}
+  #map{height:100%}
+  .panel{padding:10px 12px;border-top:1px solid #1f242b;display:grid;gap:8px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  button,a.btn{background:var(--brand);color:#fff;border:0;padding:10px 14px;border-radius:12px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  .secondary{background:#222a35;color:var(--fg)}
+  .error{color:#ff6b6b}
+  .hidden{display:none}
+  .pill{padding:5px 10px;border-radius:999px;background:#1b2330;color:var(--muted);font-size:12px}
+  .list{font-size:13px;color:var(--muted)} .list b{color:var(--fg)}
+  .credit{color:var(--muted);font-size:12px;text-align:center}
+
+  /* ==== custom markers ==== */
+  .marker{width:18px;height:18px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+  .marker-user{background:#3b82f6}           /* синий – ты */
+  .marker-church{background:#ef4444}         /* красный – храмы */
+  .leaflet-popup-content a{color:var(--brand)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🕯️ Nearest Orthodox Church</h1>
+    <span class="status" id="status">Initializing…</span>
+    <span class="pill" id="distancePill" hidden>–</span>
+  </header>
+  <div id="map"></div>
+  <div class="panel">
+    <div class="row">
+      <button id="recenterBtn" class="secondary">Recenter</button>
+      <button id="routeBtn">Route to nearest</button>
+      <a id="externalBtn" class="btn secondary" target="_blank" rel="noopener">Open in Maps</a>
+      <button id="retryBtn" class="secondary hidden">Try again</button>
+      <button id="testMskBtn" class="secondary">Test Moscow</button>
     </div>
+    <div class="list" id="info">Waiting for location…</div>
+    <div class="error hidden" id="error"></div>
+    <div class="credit">Data: © OpenStreetMap contributors • Routing: OSRM</div>
+  </div>
+</div>
 
-    <!-- Telegram WebApp SDK (не обязателен; не ломает страницу) -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Leaflet -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
-    <script>
-      const tg = window.Telegram?.WebApp;
-      if (tg) {
-        tg.ready(); tg.expand();
-        document.documentElement.style.setProperty('--bg', tg.themeParams.bg_color || '#0e1117');
-        document.documentElement.style.setProperty('--fg', tg.themeParams.text_color || '#e6edf3');
-        document.documentElement.style.setProperty('--muted', tg.themeParams.hint_color || '#9aa4ad');
-        document.documentElement.style.setProperty('--brand', tg.themeParams.button_color || '#3b82f6');
+<script>
+(function(){
+  // Telegram theme (не обязательно)
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready(); tg.expand();
+    document.documentElement.style.setProperty('--bg', tg.themeParams?.bg_color || '#0e1117');
+    document.documentElement.style.setProperty('--fg', tg.themeParams?.text_color || '#e6edf3');
+    document.documentElement.style.setProperty('--muted', tg.themeParams?.hint_color || '#9aa4ad');
+    document.documentElement.style.setProperty('--brand', tg.themeParams?.button_color || '#3b82f6');
+  }
+
+  // UI refs
+  const statusEl = document.getElementById('status');
+  const errorEl  = document.getElementById('error');
+  const infoEl   = document.getElementById('info');
+  const routeBtn = document.getElementById('routeBtn');
+  const recenterBtn = document.getElementById('recenterBtn');
+  const externalBtn = document.getElementById('externalBtn');
+  const distancePill = document.getElementById('distancePill');
+  const retryBtn = document.getElementById('retryBtn');
+  const testMskBtn = document.getElementById('testMskBtn');
+
+  let map, userMarker, routeLayer;
+  let userLatLng = null;
+  let nearest = null;
+
+  // ИКОНКИ (безопасное объявление)
+  const userIcon = L.divIcon({ className:'marker marker-user', iconSize:[18,18], iconAnchor:[9,9], popupAnchor:[0,-10] });
+  const churchIcon = L.divIcon({ className:'marker marker-church', iconSize:[16,16], iconAnchor:[8,8], popupAnchor:[0,-10] });
+
+  // Хелперы
+  function km(m){ return (m/1000).toFixed(2) + ' km'; }
+  function hav(lat1,lon1,lat2,lon2){
+    const R=6371e3,toRad=v=>v*Math.PI/180;
+    const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+    const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  }
+  function setStatus(t){ statusEl.textContent=t; }
+  function setError(t){ errorEl.textContent=t||''; errorEl.classList.toggle('hidden',!t); }
+
+  function initMap(lat, lon){
+    map = L.map('map');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      attribution:'&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    userMarker = L.marker([lat, lon], { icon:userIcon, title:'You' }).addTo(map);
+    map.setView([lat, lon], 15);
+  }
+
+  function externalMapLink(to){
+    const lat=to.lat.toFixed(6), lon=to.lon.toFixed(6);
+    const ua=navigator.userAgent.toLowerCase();
+    if(/iphone|ipad|ipod/.test(ua)) return `http://maps.apple.com/?daddr=${lat},${lon}&dirflg=w`;
+    if(/android/.test(ua)) return `geo:${lat},${lon}?q=${lat},${lon}(Orthodox%20Church)`;
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=walking`;
+  }
+
+  // Карточка попапа
+  function wikiUrl(wikipediaTag){
+    if(!wikipediaTag) return null;
+    const parts = wikipediaTag.split(':'); if(parts.length<2) return null;
+    const lang = parts.shift(); const title = parts.join(':').trim().replace(/\s/g,'_');
+    return lang && title ? `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}` : null;
+  }
+  function buildPopup(p){
+    const t = p.tags || {};
+    const addr = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' ');
+    const city = t['addr:city'] || t['addr:suburb'];
+    const denom = t.denomination ? t.denomination.replace(/_/g,' ') : null;
+    const phone = t.phone || t['contact:phone'];
+    const site  = t.website || t.url;
+    const wiki  = t.wikipedia ? wikiUrl(t.wikipedia) : (t.wikidata ? `https://www.wikidata.org/wiki/${t.wikidata}` : null);
+    const rows = [
+      `🕍 <b>${p.name}</b>`,
+      addr || city ? `📍 ${[addr, city].filter(Boolean).join(', ')}` : null,
+      denom ? `✝️ ${denom}` : null,
+      t.opening_hours ? `⏰ ${t.opening_hours}` : null,
+      phone ? `📞 <a href="tel:${phone.replace(/[^+\d]/g,'')}">${phone}</a>` : null,
+      site ? `🌐 <a href="${site}" target="_blank" rel="noopener">Website</a>` : null,
+      wiki ? `📖 <a href="${wiki}" target="_blank" rel="noopener">About</a>` : null,
+      (typeof userLatLng?.lat === 'number') ? `📏 ${km(hav(userLatLng.lat, userLatLng.lon, p.lat, p.lon))}` : null,
+    ].filter(Boolean);
+    return rows.join('<br>');
+  }
+
+  // УЛУЧШЕННЫЙ Overpass с ротацией зеркал и бэкоффом
+  async function queryOrthodox(lat, lon, radius){
+    var q =
+      '[out:json][timeout:30];\n' +
+      '(\n' +
+      '  nwr["amenity"~"place_of_worship|monastery",i]["religion"~"orthodox|christian",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
+      '  nwr["amenity"~"place_of_worship|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
+      '  nwr["amenity"~"place_of_worship|monastery",i]["name"~"Orthodox|Православ",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
+      '  nwr["building"~"church|chapel|cathedral|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
+      ');\n' +
+      'out center;';
+    var endpoints = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://overpass.openstreetmap.fr/api/interpreter',
+      'https://overpass.osm.ch/api/interpreter',
+      'https://overpass.openstreetmap.ru/api/interpreter'
+    ];
+    var start = Math.floor(Math.random() * endpoints.length);
+
+    async function tryOnce(url){
+      var res = await fetch(url, { method:'POST', body:q, headers:{'Content-Type':'text/plain','Accept':'application/json'} });
+      if ([429,502,503,504].includes(res.status)) throw new Error('BUSY_'+res.status);
+      var text = await res.text();
+      var t = text.trim(); if (!t || t[0] !== '{') throw new Error('NOT_JSON');
+      var data; try { data = JSON.parse(t); } catch(_){ throw new Error('BAD_JSON'); }
+      var seen = new Set(), list = [];
+      for (var i=0;i<(data.elements||[]).length;i++){
+        var el=data.elements[i];
+        var latc = el.type==='node'? el.lat : (el.center && el.center.lat);
+        var lonc = el.type==='node'? el.lon : (el.center && el.center.lon);
+        if(!latc || !lonc) continue;
+        var key = el.type + '/' + el.id;
+        if(seen.has(key)) continue; seen.add(key);
+        var tags = el.tags || {};
+        var name = tags['name:ru'] || tags.name || 'Православный храм';
+        list.push({ id:key, name:name, lat:latc, lon:lonc, tags:tags });
       }
+      return list;
+    }
 
-      const statusEl = document.getElementById('status');
-      const errorEl = document.getElementById('error');
-      const infoEl = document.getElementById('info');
-      const routeBtn = document.getElementById('routeBtn');
-      const recenterBtn = document.getElementById('recenterBtn');
-      const externalBtn = document.getElementById('externalBtn');
-      const distancePill = document.getElementById('distancePill');
-
-      let map, userMarker, routeLayer;
-      let userLatLng = null;
-      let nearest = null;
-      const userIcon = L.divIcon({
-    className: 'marker marker-user',
-    iconSize: [18,18],
-    iconAnchor: [9,9],
-    popupAnchor: [0,-10],
-  });
-
-  const churchIcon = L.divIcon({
-    className: 'marker marker-church',
-    iconSize: [16,16],
-    iconAnchor: [8,8],
-    popupAnchor: [0,-10],
-  });
-
-      function km(m){ return (m/1000).toFixed(2) + ' km'; }
-      function hav(lat1, lon1, lat2, lon2){
-        const R=6371e3, toRad=v=>v*Math.PI/180;
-        const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
-        const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
-        return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+    var lastErr=null;
+    for (var step=0; step<endpoints.length*2; step++){
+      var url = endpoints[(start+step)%endpoints.length];
+      try {
+        var list = await tryOnce(url);
+        return list.slice(0, 400);
+      } catch(e){
+        lastErr=e;
+        await new Promise(r=>setTimeout(r, 500 + Math.random()*700));
       }
-      function wikiUrl(wikipediaTag) {
-  // Пример тега: "ru:Храм_Христа_Спасителя" или "en:Cathedral of Christ the Saviour"
-  if (!wikipediaTag) return null;
-  const [lang, ...rest] = wikipediaTag.split(':');
-  const title = rest.join(':').trim().replace(/\s/g, '_');
-  if (!lang || !title) return null;
-  return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
-}
+    }
+    throw (lastErr || new Error('Overpass failed'));
+  }
 
-function buildPopup(p) {
-  const t = p.tags || {};
-  const addrLine = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' ');
-  const city = t['addr:city'] || t['addr:suburb'];
-  const denom = t.denomination ? t.denomination.replace(/_/g, ' ') : null;
-  const phone = t.phone || t['contact:phone'];
-  const site  = t.website || t.url;
-  const wiki  = t.wikipedia ? wikiUrl(t.wikipedia) : (t.wikidata ? `https://www.wikidata.org/wiki/${t.wikidata}` : null);
-
-  const rows = [
-    `🕍 <b>${p.name}</b>`,
-    addrLine || city ? `📍 ${[addrLine, city].filter(Boolean).join(', ')}` : null,
-    denom ? `✝️ ${denom}` : null,
-    t.opening_hours ? `⏰ ${t.opening_hours}` : null,
-    phone ? `📞 <a href="tel:${phone.replace(/[^+\d]/g,'')}">${phone}</a>` : null,
-    site ? `🌐 <a href="${site}" target="_blank" rel="noopener">Website</a>` : null,
-    wiki ? `📖 <a href="${wiki}" target="_blank" rel="noopener">About</a>` : null,
-    (typeof userLatLng?.lat === 'number') ? `📏 ${km(hav(userLatLng.lat, userLatLng.lon, p.lat, p.lon))}` : null,
-  ].filter(Boolean);
-
-  return rows.join('<br>');
-}
-      function setStatus(t){ statusEl.textContent=t; }
-      function setError(t){ errorEl.textContent=t; errorEl.classList.toggle('hidden',!t); }
-
-      function initMap(lat, lon){
-        map = L.map('map');
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
-       userMarker = L.marker([lat, lon], { icon: userIcon, title: 'You' }).addTo(map);
-        map.setView([lat, lon], 15);
-      }
-
- async function queryOrthodox(lat, lon, radius) {
-  var q =
-    '[out:json][timeout:30];\n' +
-    '(\n' +
-    '  nwr["amenity"~"place_of_worship|monastery",i]["religion"~"orthodox|christian",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
-    '  nwr["amenity"~"place_of_worship|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
-    '  nwr["amenity"~"place_of_worship|monastery",i]["name"~"Orthodox|Православ",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
-    '  nwr["building"~"church|chapel|cathedral|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
-    ');\n' +
-    'out center;';
-
-  // Больше зеркал + рандомный старт для распределения нагрузки
-  var endpoints = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
-    'https://overpass.openstreetmap.fr/api/interpreter',
-    'https://overpass.osm.ch/api/interpreter',
-    'https://overpass.openstreetmap.ru/api/interpreter'
-  ];
-  var start = Math.floor(Math.random() * endpoints.length);
-
-  async function tryOnce(url) {
-    // читаем как текст и сами проверяем, что это JSON (чтобы не падать на XML/HTML)
-    var res = await fetch(url, {
-      method: 'POST',
-      body: q,
-      headers: { 'Content-Type': 'text/plain', 'Accept': 'application/json' },
+  function pickNearest(places){
+    let best=null;
+    places.forEach(p=>{
+      const d=hav(userLatLng.lat,userLatLng.lon,p.lat,p.lon);
+      if(!best || d<best.distance) best={...p, distance:d};
+      L.marker([p.lat,p.lon], { icon:churchIcon, title:p.name })
+        .addTo(map).bindPopup(buildPopup(p));
     });
-
-    if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
-      // перегрузка: даём шанс другому зеркалу
-      throw new Error('BUSY_' + res.status);
-    }
-
-    var text = await res.text();
-    var t = text.trim();
-    if (!t || t[0] !== '{') throw new Error('NOT_JSON'); // сервер прислал HTML/XML (страница ошибки)
-
-    var data;
-    try { data = JSON.parse(t); }
-    catch (e) { throw new Error('BAD_JSON'); }
-
-    // нормализация + дедуп
-    var seen = new Set();
-    var list = [];
-    for (var i = 0; i < (data.elements || []).length; i++) {
-      var el = data.elements[i];
-      var latc = el.type === 'node' ? el.lat : (el.center && el.center.lat);
-      var lonc = el.type === 'node' ? el.lon : (el.center && el.center.lon);
-      if (!latc || !lonc) continue;
-      var key = el.type + '/' + el.id;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      var tags = el.tags || {};
-      var name = tags['name:ru'] || tags.name || 'Православный храм';
-      list.push({ id: key, name: name, lat: latc, lon: lonc, tags: tags });
-    }
-    return list;
+    return best;
   }
 
-  // Обход зеркал + лёгкий экспоненциальный бэкофф
-  var lastErr = null;
-  for (var step = 0; step < endpoints.length * 2; step++) {
-    var url = endpoints[(start + step) % endpoints.length];
-    try {
-      var list = await tryOnce(url);
-      // мягкий ограничитель (для производительности рендера)
-      return list.slice(0, 400);
-    } catch (e) {
-      lastErr = e;
-      // маленькая задержка перед следующей попыткой
-      await new Promise(function (r) { setTimeout(r, 500 + Math.random() * 700); });
-      continue;
+  async function drawRoute(from,to){
+    const url=`https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
+    const res=await fetch(url);
+    if(!res.ok) throw new Error('Routing error '+res.status);
+    const data=await res.json();
+    const route=data.routes?.[0]; if(!route) throw new Error('No route');
+    const line=L.geoJSON(route.geometry);
+    if(routeLayer) routeLayer.remove();
+    routeLayer=line.addTo(map);
+    distancePill.textContent=km(route.distance);
+    distancePill.hidden=false;
+    map.fitBounds(line.getBounds(),{padding:[30,30]});
+    infoEl.innerHTML=`Routing to <b>${to.name}</b> · Distance: <b>${km(route.distance)}</b>`;
+  }
+
+  async function searchFrom(lat, lon){
+    setError('');
+    setStatus('Searching nearby churches…');
+    retryBtn.classList.add('hidden');
+    try{
+      let found = await queryOrthodox(lat, lon, 3000).catch(()=>[]);
+      let list  = found.length ? found : await queryOrthodox(lat, lon, 10000).catch(()=>[]);
+      let places= list.length  ? list  : await queryOrthodox(lat, lon, 30000).catch(()=>[]);
+      if(!places.length){
+        setStatus('No nearby Orthodox churches found.');
+        infoEl.textContent='Try moving the map or press “Try again”.';
+        routeBtn.disabled=true; externalBtn.classList.add('hidden'); retryBtn.classList.remove('hidden');
+        return;
+      }
+      userLatLng={lat,lon};
+      const wasEmpty = !map;
+      if (wasEmpty) initMap(lat, lon);
+      userMarker.setLatLng([lat, lon]);
+      nearest = pickNearest(places);
+
+      const mNear = L.marker([nearest.lat,nearest.lon], { icon:churchIcon, title:nearest.name })
+        .addTo(map).bindPopup(buildPopup(nearest));
+      mNear.openPopup();
+
+      setStatus('Nearest found');
+      infoEl.innerHTML=`Nearest: <b>${nearest.name}</b> · ~${km(hav(lat,lon,nearest.lat,nearest.lon))} away`;
+      externalBtn.href=externalMapLink(nearest);
+      externalBtn.textContent='Open in Maps';
+    } catch(e){
+      console.warn(e);
+      setStatus('Overpass is busy');
+      setError('Service is rate-limited now. Please try again a bit later.');
+      retryBtn.classList.remove('hidden');
     }
   }
-  throw (lastErr || new Error('Overpass failed'));
-}
 
-      function pickNearest(places){
-        let best=null;
-        places.forEach(p=>{
-          const d=hav(userLatLng.lat,userLatLng.lon,p.lat,p.lon);
-          if(!best||d<best.distance) best={...p,distance:d};
-        L.marker([p.lat, p.lon], { icon: churchIcon, title: p.name })
-  .addTo(map)
-  .bindPopup(buildPopup(p));
-        });
-        return best;
-      }
+  async function locateAndLoad(){
+    setStatus('Getting location…');
+    try{
+      const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:false,maximumAge:60000,timeout:30000}));
+      const {latitude,longitude}=pos.coords;
+      initMap(latitude, longitude);
+      await searchFrom(latitude, longitude);
+    }catch(err){
+      console.warn('Geolocation error:', err);
+      // Fallback: Москва, далее ищем от центра карты
+      initMap(55.751244, 37.618423);
+      setStatus('Location error – using map center');
+      const c = map.getCenter();
+      await searchFrom(c.lat, c.lng);
+    }
+  }
 
-      async function drawRoute(from,to){
-        const url=`https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
-        const res=await fetch(url);
-        if(!res.ok) throw new Error('Routing error '+res.status);
-        const data=await res.json();
-        const route=data.routes?.[0];
-        if(!route) throw new Error('No route found');
-        const line=L.geoJSON(route.geometry);
-        if(routeLayer) routeLayer.remove();
-        routeLayer=line.addTo(map);
-        distancePill.textContent=km(route.distance);
-        distancePill.hidden=false;
-        map.fitBounds(line.getBounds(),{padding:[30,30]});
-        infoEl.innerHTML=`Routing to <b>${to.name}</b> · Distance: <b>${km(route.distance)}</b>`;
-      }
+  // Кнопки
+  recenterBtn.addEventListener('click', ()=>{ if(userLatLng) map.setView([userLatLng.lat,userLatLng.lon], 15); });
+  routeBtn.addEventListener('click', async ()=>{
+    if(!userLatLng||!nearest) return;
+    routeBtn.disabled=true; const old=routeBtn.textContent; routeBtn.textContent='Routing…';
+    try{ await drawRoute(userLatLng, nearest); }
+    catch(e){ console.error(e); setError('Could not draw route. Use the external map button.'); }
+    finally{ routeBtn.disabled=false; routeBtn.textContent=old; }
+  });
+  retryBtn.addEventListener('click', ()=>{
+    setError(''); retryBtn.classList.add('hidden');
+    const c = map.getCenter(); searchFrom(c.lat, c.lng);
+  });
+  testMskBtn.addEventListener('click', ()=>{
+    if(!map) initMap(55.751244, 37.618423); else map.setView([55.751244, 37.618423], 14);
+    searchFrom(55.751244, 37.618423);
+  });
 
-      function externalMapLink(to){
-        const lat=to.lat.toFixed(6), lon=to.lon.toFixed(6);
-        const ua=navigator.userAgent.toLowerCase();
-        if(/iphone|ipad|ipod/.test(ua)) return `http://maps.apple.com/?daddr=${lat},${lon}&dirflg=w`;
-        if(/android/.test(ua)) return `geo:${lat},${lon}?q=${lat},${lon}(Orthodox%20Church)`;
-        return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=walking`;
-      }
-
-      async function searchFrom(lat, lon){
-        setStatus('Searching nearby churches…');
-        const found = await queryOrthodox(lat, lon, 3000).catch(()=>[]);
-        const list = found.length ? found : await queryOrthodox(lat, lon, 10000).catch(()=>[]);
-        const places = list.length ? list : await queryOrthodox(lat, lon, 30000).catch(()=>[]);
-        if(!places.length){
-          setStatus('No nearby Orthodox churches found.');
-          infoEl.textContent='Try moving the map or check again later.';
-          routeBtn.disabled=true; externalBtn.classList.add('hidden'); return;
-        }
-        userLatLng={lat,lon};
-        nearest = pickNearest(places);
-L.marker([nearest.lat, nearest.lon], { icon: churchIcon, title: nearest.name })
-  .addTo(map)
-  .bindPopup(buildPopup(nearest))
-  .openPopup();       
-setStatus('Nearest found');
-        infoEl.innerHTML=`Nearest: <b>${nearest.name}</b> · ~${km(hav(lat,lon,nearest.lat,nearest.lon))} away`;
-        externalBtn.href=externalMapLink(nearest);
-        externalBtn.textContent='Open in Maps';
-      }
-
-      async function locateAndLoad(){
-        setStatus('Getting location…');
-        try{
-          const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:false,maximumAge:60000,timeout:30000}));
-          const { latitude, longitude } = pos.coords;
-          if(!map) initMap(latitude, longitude);
-          if(userMarker) userMarker.setLatLng([latitude, longitude]);
-          await searchFrom(latitude, longitude);
-        } catch(err){
-          console.warn('Geolocation error:', err);
-          if(!map) initMap(55.751244, 37.618423); // fallback Moscow center
-          setStatus('Location error – using map center');
-          const c = map.getCenter();
-          await searchFrom(c.lat, c.lng);
-        }
-      }
-
-      document.getElementById('recenterBtn').addEventListener('click', ()=>{ if(userLatLng) map.setView([userLatLng.lat,userLatLng.lon],15); });
-      document.getElementById('routeBtn').addEventListener('click', async ()=>{
-        if(!userLatLng||!nearest) return;
-        routeBtn.disabled=true; routeBtn.textContent='Routing…';
-        try{ await drawRoute(userLatLng,nearest); }
-        catch(e){ console.error(e); setError('Could not draw route. Use the external map button.'); }
-        finally{ routeBtn.disabled=false; routeBtn.textContent='Route to nearest'; }
-      });
-
-      locateAndLoad();
-    </script>
-  </body>
+  // Старт после загрузки страницы
+  window.addEventListener('load', locateAndLoad);
+})();
+</script>
+</body>
 </html>
-
