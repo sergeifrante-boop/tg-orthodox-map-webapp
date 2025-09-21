@@ -1,1 +1,204 @@
-/Users/frante/tg-orthodox-map-webapp/public
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nearest Orthodox Church</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <style>
+      :root { --bg:#0e1117; --fg:#e6edf3; --muted:#9aa4ad; --brand:#3b82f6; }
+      html,body{height:100%;margin:0}
+      body{background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Arial}
+      #app{display:grid;grid-template-rows:auto 1fr auto;height:100%}
+      header{padding:10px 12px;border-bottom:1px solid #1f242b;display:flex;gap:8px;align-items:center}
+      header h1{font-size:16px;margin:0}
+      header .status{font-size:12px;color:var(--muted)}
+      #map{height:100%}
+      .panel{padding:10px 12px;border-top:1px solid #1f242b;display:grid;gap:8px}
+      .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+      button,a.btn{background:var(--brand);color:#fff;border:0;padding:10px 14px;border-radius:12px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+      button:disabled{opacity:.6;cursor:not-allowed}
+      .secondary{background:#222a35;color:var(--fg)}
+      .error{color:#ff6b6b}
+      .hidden{display:none}
+      .pill{padding:5px 10px;border-radius:999px;background:#1b2330;color:var(--muted);font-size:12px}
+      .list{font-size:13px;color:var(--muted)} .list b{color:var(--fg)}
+      .credit{color:var(--muted);font-size:12px;text-align:center}
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>🕯️ Nearest Orthodox Church</h1>
+        <span class="status" id="status">Initializing…</span>
+        <span class="pill" id="distancePill" hidden>–</span>
+      </header>
+      <div id="map"></div>
+      <div class="panel">
+        <div class="row">
+          <button id="recenterBtn" class="secondary">Recenter</button>
+          <button id="routeBtn">Route to nearest</button>
+          <a id="externalBtn" class="btn secondary" target="_blank" rel="noopener">Open in Maps</a>
+        </div>
+        <div class="list" id="info">Waiting for location…</div>
+        <div class="error hidden" id="error"></div>
+        <div class="credit">Data: © OpenStreetMap contributors • Routing by OSRM</div>
+      </div>
+    </div>
+
+    <!-- Telegram WebApp SDK (не обязателен; не ломает страницу) -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Leaflet -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) {
+        tg.ready(); tg.expand();
+        document.documentElement.style.setProperty('--bg', tg.themeParams.bg_color || '#0e1117');
+        document.documentElement.style.setProperty('--fg', tg.themeParams.text_color || '#e6edf3');
+        document.documentElement.style.setProperty('--muted', tg.themeParams.hint_color || '#9aa4ad');
+        document.documentElement.style.setProperty('--brand', tg.themeParams.button_color || '#3b82f6');
+      }
+
+      const statusEl = document.getElementById('status');
+      const errorEl = document.getElementById('error');
+      const infoEl = document.getElementById('info');
+      const routeBtn = document.getElementById('routeBtn');
+      const recenterBtn = document.getElementById('recenterBtn');
+      const externalBtn = document.getElementById('externalBtn');
+      const distancePill = document.getElementById('distancePill');
+
+      let map, userMarker, routeLayer;
+      let userLatLng = null;
+      let nearest = null;
+
+      function km(m){ return (m/1000).toFixed(2) + ' km'; }
+      function hav(lat1, lon1, lat2, lon2){
+        const R=6371e3, toRad=v=>v*Math.PI/180;
+        const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+        const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+        return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+      }
+      function setStatus(t){ statusEl.textContent=t; }
+      function setError(t){ errorEl.textContent=t; errorEl.classList.toggle('hidden',!t); }
+
+      function initMap(lat, lon){
+        map = L.map('map');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+        userMarker = L.marker([lat, lon], { title: 'You' }).addTo(map);
+        map.setView([lat, lon], 15);
+      }
+
+      async function queryOrthodox(lat, lon, radius){
+        const overpass = `[out:json][timeout:25];
+          (
+            node["amenity"="place_of_worship"]["religion"="christian"]["denomination"~"orthodox", i](around:${radius},${lat},${lon});
+            way["amenity"="place_of_worship"]["religion"="christian"]["denomination"~"orthodox", i](around:${radius},${lat},${lon});
+            relation["amenity"="place_of_worship"]["religion"="christian"]["denomination"~"orthodox", i](around:${radius},${lat},${lon});
+          ); out center 40;`;
+        const endpoints = [
+          'https://overpass-api.de/api/interpreter',
+          'https://overpass.kumi.systems/api/interpreter',
+          'https://overpass.openstreetmap.ru/api/interpreter'
+        ];
+        let lastErr;
+        for (const url of endpoints) {
+          try {
+            const res = await fetch(url, { method: 'POST', body: overpass, headers: { 'Content-Type':'text/plain' } });
+            if (!res.ok) throw new Error('Overpass ' + res.status);
+            const data = await res.json();
+            return data.elements.map(el=>{
+              const latc = el.type==='node'?el.lat:el.center?.lat;
+              const lonc = el.type==='node'?el.lon:el.center?.lon;
+              return { id:el.id, name:(el.tags?.name||'Orthodox Church'), lat:latc, lon:lonc };
+            }).filter(p=>p.lat&&p.lon);
+          } catch(e){ lastErr=e; }
+        }
+        throw lastErr || new Error('Overpass failed');
+      }
+
+      function pickNearest(places){
+        let best=null;
+        places.forEach(p=>{
+          const d=hav(userLatLng.lat,userLatLng.lon,p.lat,p.lon);
+          if(!best||d<best.distance) best={...p,distance:d};
+          L.marker([p.lat,p.lon],{title:p.name}).addTo(map).bindPopup(`🕍 <b>${p.name}</b>`);
+        });
+        return best;
+      }
+
+      async function drawRoute(from,to){
+        const url=`https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
+        const res=await fetch(url);
+        if(!res.ok) throw new Error('Routing error '+res.status);
+        const data=await res.json();
+        const route=data.routes?.[0];
+        if(!route) throw new Error('No route found');
+        const line=L.geoJSON(route.geometry);
+        if(routeLayer) routeLayer.remove();
+        routeLayer=line.addTo(map);
+        distancePill.textContent=km(route.distance);
+        distancePill.hidden=false;
+        map.fitBounds(line.getBounds(),{padding:[30,30]});
+        infoEl.innerHTML=`Routing to <b>${to.name}</b> · Distance: <b>${km(route.distance)}</b>`;
+      }
+
+      function externalMapLink(to){
+        const lat=to.lat.toFixed(6), lon=to.lon.toFixed(6);
+        const ua=navigator.userAgent.toLowerCase();
+        if(/iphone|ipad|ipod/.test(ua)) return `http://maps.apple.com/?daddr=${lat},${lon}&dirflg=w`;
+        if(/android/.test(ua)) return `geo:${lat},${lon}?q=${lat},${lon}(Orthodox%20Church)`;
+        return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=walking`;
+      }
+
+      async function searchFrom(lat, lon){
+        setStatus('Searching nearby churches…');
+        const found = await queryOrthodox(lat, lon, 3000).catch(()=>[]);
+        const list = found.length ? found : await queryOrthodox(lat, lon, 10000).catch(()=>[]);
+        const places = list.length ? list : await queryOrthodox(lat, lon, 30000).catch(()=>[]);
+        if(!places.length){
+          setStatus('No nearby Orthodox churches found.');
+          infoEl.textContent='Try moving the map or check again later.';
+          routeBtn.disabled=true; externalBtn.classList.add('hidden'); return;
+        }
+        userLatLng={lat,lon};
+        nearest = pickNearest(places);
+        L.marker([nearest.lat,nearest.lon],{title:nearest.name}).addTo(map).bindPopup(`🕍 <b>${nearest.name}</b> (nearest)`).openPopup();
+        setStatus('Nearest found');
+        infoEl.innerHTML=`Nearest: <b>${nearest.name}</b> · ~${km(hav(lat,lon,nearest.lat,nearest.lon))} away`;
+        externalBtn.href=externalMapLink(nearest);
+        externalBtn.textContent='Open in Maps';
+      }
+
+      async function locateAndLoad(){
+        setStatus('Getting location…');
+        try{
+          const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:false,maximumAge:60000,timeout:30000}));
+          const { latitude, longitude } = pos.coords;
+          if(!map) initMap(latitude, longitude);
+          if(userMarker) userMarker.setLatLng([latitude, longitude]);
+          await searchFrom(latitude, longitude);
+        } catch(err){
+          console.warn('Geolocation error:', err);
+          if(!map) initMap(55.751244, 37.618423); // fallback Moscow center
+          setStatus('Location error – using map center');
+          const c = map.getCenter();
+          await searchFrom(c.lat, c.lng);
+        }
+      }
+
+      document.getElementById('recenterBtn').addEventListener('click', ()=>{ if(userLatLng) map.setView([userLatLng.lat,userLatLng.lon],15); });
+      document.getElementById('routeBtn').addEventListener('click', async ()=>{
+        if(!userLatLng||!nearest) return;
+        routeBtn.disabled=true; routeBtn.textContent='Routing…';
+        try{ await drawRoute(userLatLng,nearest); }
+        catch(e){ console.error(e); setError('Could not draw route. Use the external map button.'); }
+        finally{ routeBtn.disabled=false; routeBtn.textContent='Route to nearest'; }
+      });
+
+      locateAndLoad();
+    </script>
+  </body>
+</html>
+
