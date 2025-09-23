@@ -42,11 +42,11 @@
   <div id="map"></div>
   <div class="panel">
     <div class="row">
-      <button id="recenterBtn" class="secondary">Recenter</button>
-      <button id="routeBtn">Route to nearest</button>
-      <a id="externalBtn" class="btn secondary" target="_blank" rel="noopener">Open in Maps</a>
-      <button id="retryBtn" class="secondary hidden">Try again</button>
-      <button id="testMskBtn" class="secondary">Test Moscow</button>
+  <button id="recenterBtn" class="secondary">Recenter</button>
+  <button id="routeBtn">Route to nearest</button>
+  <a id="externalBtn" class="btn secondary" target="_blank" rel="noopener">Open in Maps</a>
+  <button id="retryBtn" class="secondary hidden">Try again</button>
+  <button id="testMskBtn" class="secondary">Test Moscow</button>
     </div>
     <div class="list" id="info">Waiting for location…</div>
     <div class="error hidden" id="error"></div>
@@ -108,12 +108,12 @@
     map.setView([lat, lon], 15);
   }
 
-  function externalMapLink(to){
-    const lat=to.lat.toFixed(6), lon=to.lon.toFixed(6);
-    const ua=navigator.userAgent.toLowerCase();
-    if(/iphone|ipad|ipod/.test(ua)) return `http://maps.apple.com/?daddr=${lat},${lon}&dirflg=w`;
-    if(/android/.test(ua)) return `geo:${lat},${lon}?q=${lat},${lon}(Orthodox%20Church)`;
-    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=walking`;
+function externalMapLink(to){
+  const lat=to.lat.toFixed(6), lon=to.lon.toFixed(6);
+  const ua=navigator.userAgent.toLowerCase();
+  if(/iphone|ipad|ipod/.test(ua)) return `http://maps.apple.com/?daddr=${lat},${lon}&dirflg=w`;
+  if(/android/.test(ua)) return `geo:${lat},${lon}?q=${lat},${lon}(Orthodox%20Church)`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=walking`;
   }
 
   // Карточка попапа
@@ -144,57 +144,55 @@
     return rows.join('<br>');
   }
 
-  // УЛУЧШЕННЫЙ Overpass с ротацией зеркал и бэкоффом
   async function queryOrthodox(lat, lon, radius){
-    var q =
-      '[out:json][timeout:30];\n' +
-      '(\n' +
-      '  nwr["amenity"~"place_of_worship|monastery",i]["religion"~"orthodox|christian",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
-      '  nwr["amenity"~"place_of_worship|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
-      '  nwr["amenity"~"place_of_worship|monastery",i]["name"~"Orthodox|Православ",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
-      '  nwr["building"~"church|chapel|cathedral|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
-      ');\n' +
-      'out center;';
-    var endpoints = [
-      'https://overpass-api.de/api/interpreter',
-      'https://overpass.kumi.systems/api/interpreter',
-      'https://overpass.openstreetmap.fr/api/interpreter',
-      'https://overpass.osm.ch/api/interpreter',
-      'https://overpass.openstreetmap.ru/api/interpreter'
-    ];
-    var start = Math.floor(Math.random() * endpoints.length);
+  var q =
+    '[out:json][timeout:30];\n' +
+    '(\n' +
+    '  nwr["amenity"~"place_of_worship|monastery",i]["religion"~"orthodox|christian",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
+    '  nwr["amenity"~"place_of_worship|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
+    '  nwr["amenity"~"place_of_worship|monastery",i]["name"~"Orthodox|Православ",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
+    '  nwr["building"~"church|chapel|cathedral|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:' + radius + ',' + lat + ',' + lon + ');\n' +
+    ');\n' +
+    'out center;';
+  var endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.openstreetmap.fr/api/interpreter',
+    'https://overpass.osm.ch/api/interpreter',
+    'https://overpass.openstreetmap.ru/api/interpreter'
+  ];
+  var start = Math.floor(Math.random() * endpoints.length);
 
-    async function tryOnce(url){
-      var res = await fetch(url, { method:'POST', body:q, headers:{'Content-Type':'text/plain','Accept':'application/json'} });
-      if ([429,502,503,504].includes(res.status)) throw new Error('BUSY_'+res.status);
-      var text = await res.text();
-      var t = text.trim(); if (!t || t[0] !== '{') throw new Error('NOT_JSON');
-      var data; try { data = JSON.parse(t); } catch(_){ throw new Error('BAD_JSON'); }
-      var seen = new Set(), list = [];
-      for (var i=0;i<(data.elements||[]).length;i++){
-        var el=data.elements[i];
-        var latc = el.type==='node'? el.lat : (el.center && el.center.lat);
-        var lonc = el.type==='node'? el.lon : (el.center && el.center.lon);
-        if(!latc || !lonc) continue;
-        var key = el.type + '/' + el.id;
-        if(seen.has(key)) continue; seen.add(key);
-        var tags = el.tags || {};
-        var name = tags['name:ru'] || tags.name || 'Православный храм';
-        list.push({ id:key, name:name, lat:latc, lon:lonc, tags:tags });
-      }
-      return list;
+  async function tryOnce(url){
+    var res = await fetch(url, { method:'POST', body:q, headers:{'Content-Type':'text/plain','Accept':'application/json'} });
+    if ([429,502,503,504].includes(res.status)) throw new Error('BUSY_'+res.status);
+    var text = await res.text();
+    var t = text.trim(); if (!t || t[0] !== '{') throw new Error('NOT_JSON');
+    var data; try { data = JSON.parse(t); } catch(_){ throw new Error('BAD_JSON'); }
+    var seen = new Set(), list = [];
+    for (var i=0;i<(data.elements||[]).length;i++){
+      var el=data.elements[i];
+      var latc = el.type==='node'? el.lat : (el.center && el.center.lat);
+      var lonc = el.type==='node'? el.lon : (el.center && el.center.lon);
+      if(!latc || !lonc) continue;
+      var key = el.type + '/' + el.id;
+      if(seen.has(key)) continue; seen.add(key);
+      var tags = el.tags || {};
+      var name = tags['name:ru'] || tags.name || 'Православный храм';
+      list.push({ id:key, name:name, lat:latc, lon:lonc, tags:tags });
     }
+    return list;
+  }
 
-    var lastErr=null;
-    for (var step=0; step<endpoints.length*2; step++){
-      var url = endpoints[(start+step)%endpoints.length];
-      try {
-        var list = await tryOnce(url);
-        return list.slice(0, 400);
-      } catch(e){
-        lastErr=e;
-        await new Promise(r=>setTimeout(r, 500 + Math.random()*700));
-      }
+  var lastErr=null;
+  for (var step=0; step<endpoints.length*2; step++){
+    var url = endpoints[(start+step)%endpoints.length];
+    try {
+      var list = await tryOnce(url);
+      return list.slice(0, 400);
+    } catch(e){
+      lastErr=e;
+      await new Promise(r=>setTimeout(r, 500 + Math.random()*700));
     }
     throw (lastErr || new Error('Overpass failed'));
   }
@@ -225,68 +223,68 @@
     infoEl.innerHTML=`Routing to <b>${to.name}</b> · Distance: <b>${km(route.distance)}</b>`;
   }
 
-  async function searchFrom(lat, lon){
-    setError('');
-    setStatus('Searching nearby churches…');
-    retryBtn.classList.add('hidden');
-    try{
-      let found = await queryOrthodox(lat, lon, 3000).catch(()=>[]);
-      let list  = found.length ? found : await queryOrthodox(lat, lon, 10000).catch(()=>[]);
-      let places= list.length  ? list  : await queryOrthodox(lat, lon, 30000).catch(()=>[]);
-      if(!places.length){
-        setStatus('No nearby Orthodox churches found.');
-        infoEl.textContent='Try moving the map or press “Try again”.';
-        routeBtn.disabled=true; externalBtn.classList.add('hidden'); retryBtn.classList.remove('hidden');
-        return;
-      }
-      userLatLng={lat,lon};
-      const wasEmpty = !map;
-      if (wasEmpty) initMap(lat, lon);
-      userMarker.setLatLng([lat, lon]);
-      nearest = pickNearest(places);
+ async function searchFrom(lat, lon){
+  setError('');
+  setStatus('Searching nearby churches…');
+  retryBtn.classList.add('hidden');
+  try{
+    let found = await queryOrthodox(lat, lon, 3000).catch(()=>[]);
+    let list  = found.length ? found : await queryOrthodox(lat, lon, 10000).catch(()=>[]);
+    let places= list.length  ? list  : await queryOrthodox(lat, lon, 30000).catch(()=>[]);
+    if(!places.length){
+  setStatus('No nearby Orthodox churches found.');
+  infoEl.textContent='Try moving the map or press “Try again”.';
+  routeBtn.disabled=true; externalBtn.classList.add('hidden'); retryBtn.classList.remove('hidden');
+  return;
+}
+userLatLng={lat,lon};
+const wasEmpty = !map;
+if (wasEmpty) initMap(lat, lon);
+userMarker.setLatLng([lat, lon]);
+nearest = pickNearest(places);
 
-      const mNear = L.marker([nearest.lat,nearest.lon], { icon:churchIcon, title:nearest.name })
-        .addTo(map).bindPopup(buildPopup(nearest));
-      mNear.openPopup();
+const mNear = L.marker([nearest.lat,nearest.lon], { icon:churchIcon, title:nearest.name })
+  .addTo(map).bindPopup(buildPopup(nearest));
+mNear.openPopup();
 
-      setStatus('Nearest found');
-      infoEl.innerHTML=`Nearest: <b>${nearest.name}</b> · ~${km(hav(lat,lon,nearest.lat,nearest.lon))} away`;
-      externalBtn.href=externalMapLink(nearest);
-      externalBtn.textContent='Open in Maps';
-    } catch(e){
-      console.warn(e);
-      setStatus('Overpass is busy');
-      setError('Service is rate-limited now. Please try again a bit later.');
-      retryBtn.classList.remove('hidden');
-    }
+setStatus('Nearest found');
+infoEl.innerHTML=`Nearest: <b>${nearest.name}</b> · ~${km(hav(lat,lon,nearest.lat,nearest.lon))} away`;
+externalBtn.href=externalMapLink(nearest);
+externalBtn.textContent='Open in Maps';
+  } catch(e){
+    console.warn(e);
+    setStatus('Overpass is busy');
+    setError('Service is rate-limited now. Please try again a bit later.');
+    retryBtn.classList.remove('hidden');
   }
+}
 
-  async function locateAndLoad(){
-    setStatus('Getting location…');
-    try{
-      const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:false,maximumAge:60000,timeout:30000}));
-      const {latitude,longitude}=pos.coords;
-      initMap(latitude, longitude);
-      await searchFrom(latitude, longitude);
-    }catch(err){
-      console.warn('Geolocation error:', err);
-      // Fallback: Москва, далее ищем от центра карты
-      initMap(55.751244, 37.618423);
-      setStatus('Location error – using map center');
-      const c = map.getCenter();
-      await searchFrom(c.lat, c.lng);
-    }
+async function locateAndLoad(){
+  setStatus('Getting location…');
+  try{
+    const pos = await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:false,maximumAge:60000,timeout:30000}));
+    const {latitude,longitude}=pos.coords;
+    initMap(latitude, longitude);
+    await searchFrom(latitude, longitude);
+  }catch(err){
+    console.warn('Geolocation error:', err);
+    // Fallback: Москва, далее ищем от центра карты
+    initMap(55.751244, 37.618423);
+    setStatus('Location error – using map center');
+    const c = map.getCenter();
+    await searchFrom(c.lat, c.lng);
   }
+}
 
-  // Кнопки
-  recenterBtn.addEventListener('click', ()=>{ if(userLatLng) map.setView([userLatLng.lat,userLatLng.lon], 15); });
-  routeBtn.addEventListener('click', async ()=>{
-    if(!userLatLng||!nearest) return;
-    routeBtn.disabled=true; const old=routeBtn.textContent; routeBtn.textContent='Routing…';
-    try{ await drawRoute(userLatLng, nearest); }
-    catch(e){ console.error(e); setError('Could not draw route. Use the external map button.'); }
-    finally{ routeBtn.disabled=false; routeBtn.textContent=old; }
-  });
+// Кнопки
+recenterBtn.addEventListener('click', ()=>{ if(userLatLng) map.setView([userLatLng.lat,userLatLng.lon], 15); });
+routeBtn.addEventListener('click', async ()=>{
+  if(!userLatLng||!nearest) return;
+  routeBtn.disabled=true; const old=routeBtn.textContent; routeBtn.textContent='Routing…';
+  try{ await drawRoute(userLatLng, nearest); }
+  catch(e){ console.error(e); setError('Could not draw route. Use the external map button.'); }
+  finally{ routeBtn.disabled=false; routeBtn.textContent=old; }
+});
   retryBtn.addEventListener('click', ()=>{
     setError(''); retryBtn.classList.add('hidden');
     const c = map.getCenter(); searchFrom(c.lat, c.lng);
