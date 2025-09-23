@@ -29,7 +29,7 @@
   .marker-user{background:#3b82f6}           /* синий – ты */
   .marker-church{background:#ef4444}         /* красный – храмы */
   .leaflet-popup-content a{color:var(--brand)}
-  /* Отладочная плашка */
+  /* Отладочная плашка (включается ?debug=1) */
   #debug{position:fixed;left:0;right:0;bottom:0;max-height:40%;overflow:auto;padding:8px;background:rgba(0,0,0,.85);color:#fff;font:12px/1.4 monospace;display:none;z-index:99999}
 </style>
 </head>
@@ -69,8 +69,8 @@
     function show(){ dbg.style.display='block'; }
     function fmt(a){ try{ return (typeof a==='object')?JSON.stringify(a):String(a); }catch(_){ return String(a); } }
     function log(prefix,args){ if(!enabled) return; show(); dbg.innerHTML += prefix+' '+Array.from(args).map(fmt).join(' ')+'<br>'; }
-    window.addEventListener('error', e=>log('❌',[e.message,'@',e.filename,':',e.lineno,':',e.colno]));
-    window.addEventListener('unhandledrejection', e=>log('💥',[e.reason&&(e.reason.message||e.reason)]));
+    window.addEventListener('error', function(e){ log('❌',[e.message,'@',e.filename,':',e.lineno,':',e.colno]); });
+    window.addEventListener('unhandledrejection', function(e){ log('💥',[e.reason&&(e.reason.message||e.reason)]); });
     var _log=console.log,_err=console.error,_warn=console.warn;
     console.log=function(){ log('ℹ️',arguments); return _log.apply(console,arguments); };
     console.error=function(){ log('❌',arguments); return _err.apply(console,arguments); };
@@ -112,8 +112,13 @@
   function km(m){ return (m/1000).toFixed(2)+' km'; }
   function hav(lat1,lon1,lat2,lon2){
     var R=6371e3, toRad=function(v){return v*Math.PI/180;};
-    var dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
-    var a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    var dLat=toRad(lat2-lat1), dLon=toRad(lat2-lon1?NaN:NaN); // placeholder to avoid typos
+  }
+  // исправление опечатки:
+  function hav(lat1_,lon1_,lat2_,lon2_){
+    var R=6371e3, toRad=function(v){return v*Math.PI/180;};
+    var dLat=toRad(lat2_-lat1_), dLon=toRad(lon2_-lon1_);
+    var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(toRad(lat1_))*Math.cos(toRad(lat2_))*Math.sin(dLon/2)*Math.sin(dLon/2);
     return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
   }
   function setStatus(t){ statusEl.textContent=t; }
@@ -156,7 +161,7 @@
     return rows.join('<br>');
   }
 
-  /* ======= Overpass с ротацией зеркал ======= */
+  /* ======= Overpass с ротацией зеркал + бэкофф ======= */
   async function queryOrthodox(lat, lon, radius){
     var q =
       '[out:json][timeout:30];\n' +
@@ -167,40 +172,64 @@
       '  nwr["building"~"church|chapel|cathedral|monastery",i]["denomination"~"orthodox|eastern_orthodox|old.*believer|.*orthodox.*",i](around:'+radius+','+lat+','+lon+');\n' +
       ');\n' +
       'out center;';
-    var endpoints=[
+
+    var endpoints = [
+      'https://z.overpass-api.de/api/interpreter',
       'https://overpass-api.de/api/interpreter',
       'https://overpass.kumi.systems/api/interpreter',
       'https://overpass.openstreetmap.fr/api/interpreter',
       'https://overpass.osm.ch/api/interpreter',
       'https://overpass.openstreetmap.ru/api/interpreter'
     ];
-    var start=Math.floor(Math.random()*endpoints.length);
+    var start = Math.floor(Math.random() * endpoints.length);
 
     async function tryOnce(url){
-      var res=await fetch(url,{method:'POST',body:q,headers:{'Content-Type':'text/plain','Accept':'application/json'}});
-      if([429,502,503,504].includes(res.status)) throw new Error('BUSY_'+res.status);
-      var text=await res.text(); var t=text.trim(); if(!t||t[0]!=='{') throw new Error('NOT_JSON');
-      var data; try{ data=JSON.parse(t);}catch(_){throw new Error('BAD_JSON');}
-      var seen=new Set(), list=[];
-      for(var i=0;i<(data.elements||[]).length;i++){
-        var el=data.elements[i];
-        var latc=el.type==='node'?el.lat:(el.center&&el.center.lat);
-        var lonc=el.type==='node'?el.lon:(el.center&&el.center.lon);
-        if(!latc||!lonc) continue;
-        var key=el.type+'/'+el.id; if(seen.has(key)) continue; seen.add(key);
-        var tags=el.tags||{}; var name=tags['name:ru']||tags.name||'Православный храм';
-        list.push({id:key,name:name,lat:latc,lon:lonc,tags:tags});
+      var res = await fetch(url, {
+        method:'POST',
+        body:q,
+        headers:{'Content-Type':'text/plain','Accept':'application/json'},
+        cache:'no-store',
+        referrerPolicy:'no-referrer',
+        mode:'cors'
+      });
+      if ([429,502,503,504].includes(res.status)) throw new Error('BUSY_'+res.status);
+      var text = await res.text();
+      var t = (text||'').trim();
+      if (!t || t.charAt(0) !== '{') throw new Error('NOT_JSON');
+      var data; try { data = JSON.parse(t); } catch(_){ throw new Error('BAD_JSON'); }
+
+      var seen = {}; var list = [];
+      var arr = (data && data.elements) ? data.elements : [];
+      for (var i=0;i<arr.length;i++){
+        var el = arr[i];
+        var latc = el.type==='node' ? el.lat : (el.center && el.center.lat);
+        var lonc = el.type==='node' ? el.lon : (el.center && el.center.lon);
+        if (!latc || !lonc) continue;
+        var key = el.type + '/' + el.id;
+        if (seen[key]) continue; seen[key] = 1;
+        var tags = el.tags || {};
+        var name = tags['name:ru'] || tags.name || 'Православный храм';
+        list.push({ id:key, name:name, lat:latc, lon:lonc, tags:tags });
       }
-      return list.slice(0,400);
+      return list.slice(0, 400);
     }
 
-    var lastErr=null;
-    for(var step=0; step<endpoints.length*2; step++){
-      var url=endpoints[(start+step)%endpoints.length];
-      try{ return await tryOnce(url); }
-      catch(e){ lastErr=e; await new Promise(r=>setTimeout(r,500+Math.random()*700)); }
+    var lastErr = null;
+    for (var step=0; step<endpoints.length*2; step++){
+      var url = endpoints[(start+step)%endpoints.length];
+      try { return await tryOnce(url); }
+      catch(e){ lastErr = e; await new Promise(function(r){ setTimeout(r, 500 + Math.random()*700); }); }
     }
-    throw (lastErr||new Error('Overpass failed'));
+    throw (lastErr || new Error('Overpass failed'));
+  }
+
+  /* ======= оффлайн-фолбэк (чтобы проверить рендер) ======= */
+  function fallbackPlaces(){
+    return [
+      { id:'node/1', name:'Храм Христа Спасителя', lat:55.744724, lon:37.605053, tags:{'name:ru':'Храм Христа Спасителя', denomination:'russian_orthodox' } },
+      { id:'node/2', name:'Собор Василия Блаженного', lat:55.752523, lon:37.623086, tags:{'name:ru':'Собор Василия Блаженного', denomination:'russian_orthodox' } },
+      { id:'node/3', name:'Новодевичий монастырь', lat:55.726065, lon:37.554676, tags:{'name:ru':'Новодевичий монастырь', denomination:'eastern_orthodox' } }
+    ];
   }
 
   /* ======= логика ======= */
@@ -214,11 +243,12 @@
 
   function placeChurchMarkers(places){
     var best=null;
-    places.forEach(function(p){
-      var d= userLatLng ? hav(userLatLng.lat,userLatLng.lon,p.lat,p.lon) : Infinity;
-      if(!best||d<best.distance) best={...p,distance:d};
+    for (var i=0;i<places.length;i++){
+      var p=places[i];
+      var d = (userLatLng) ? hav(userLatLng.lat,userLatLng.lon,p.lat,p.lon) : 1e18;
+      if (!best || d < best.distance) { best = Object.assign({ distance: d }, p); }
       L.marker([p.lat,p.lon],{icon:churchIcon,title:p.name}).addTo(map).bindPopup(buildPopup(p));
-    });
+    }
     return best;
   }
 
@@ -239,7 +269,20 @@
       if(!places.length) places = await queryOrthodox(lat, lon, 10000).catch(function(){return[];});
       if(!places.length) places = await queryOrthodox(lat, lon, 30000).catch(function(){return[];});
       if(!places.length){
-        setStatus('No results'); infoEl.textContent='Nothing found nearby. Try again later.'; retryBtn.classList.remove('hidden'); return;
+        // оффлайн демо, чтобы было что увидеть
+        places = fallbackPlaces();
+        if (places.length){
+          nearest = placeChurchMarkers(places);
+          setStatus('Using offline sample (Overpass busy)');
+          infoEl.innerHTML = 'Showing sample Moscow churches. Try “Load churches” again later.';
+          externalBtn.href = externalMapLink(nearest);
+          externalBtn.textContent = 'Open in Maps';
+          return;
+        }
+        setStatus('No results');
+        infoEl.textContent='Nothing found nearby. Try again later.';
+        retryBtn.classList.remove('hidden');
+        return;
       }
       nearest = placeChurchMarkers(places);
       setStatus('Nearest found');
@@ -247,7 +290,10 @@
       externalBtn.href=externalMapLink(nearest);
       externalBtn.textContent='Open in Maps';
     }catch(e){
-      console.error(e); setStatus('Overpass busy'); setError('The service is rate-limited. Try again.'); retryBtn.classList.remove('hidden');
+      console.error(e);
+      setStatus('Overpass busy');
+      setError('The service is rate-limited. Try again.');
+      retryBtn.classList.remove('hidden');
     }
   }
 
@@ -261,7 +307,9 @@
       setStatus('Location set. Press “Load churches”.');
       infoEl.textContent='Location acquired. Now press “Load churches”.';
     }, function(err){
-      console.warn(err); setStatus('Location error – using map center'); setError('Could not get location. Move map and press “Load churches”.');
+      console.warn(err);
+      setStatus('Location error – using map center');
+      setError('Could not get location. Move map and press “Load churches”.');
       if(!map) initMap(55.751244,37.618423);
       var c=map.getCenter(); userLatLng={lat:c.lat,lon:c.lng};
     }, {enableHighAccuracy:false,maximumAge:60000,timeout:30000});
@@ -295,7 +343,7 @@
     infoEl.textContent='Testing near Moscow center. Press “Load churches”.';
   });
 
-  /* ======= старт: просто рисуем карту (без авто-запросов) ======= */
+  /* ======= старт: рисуем карту (без автопоиска) ======= */
   window.addEventListener('load', function(){
     initMap(55.751244, 37.618423); // всегда видишь карту
     setStatus('Map ready. Press “Locate me” or “Test Moscow”.');
